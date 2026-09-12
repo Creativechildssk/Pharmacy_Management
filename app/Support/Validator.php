@@ -21,7 +21,8 @@ final class Validator
     public static function requiredString(mixed $value, int $maxLength = 255): string
     {
         $value = trim((string) $value);
-        if ($value === '' || mb_strlen($value) > $maxLength) {
+        $length = function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
+        if ($value === '' || $length > $maxLength) {
             throw new InvalidArgumentException('Required text is invalid');
         }
 
