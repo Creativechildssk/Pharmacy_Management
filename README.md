@@ -15,7 +15,7 @@ A local-network estate dispensary application developed by **WFd DeepTech Labs P
 - Operational and cost/value reports
 - CSV exports
 - Admin, Pharmacist, Store/Inventory and Management Viewer roles
-- Audit logging foundation
+- Audit logging for authentication and high-risk stock/dispensing events
 - Local database backup script
 - Localhost / estate LAN deployment
 
@@ -32,9 +32,12 @@ cp config/app.example.php config/app.php
 mysql -u root -p -e "CREATE DATABASE pharmacy_management CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 mysql -u root -p pharmacy_management < database/schema.sql
 mysql -u root -p pharmacy_management < database/seed.sql
+mysql -u root -p pharmacy_management < database/audit_triggers.sql
 bash scripts/install_vendor_assets.sh
 php scripts/create_admin.php admin "Pharmacy Administrator" "ChangeThisPassword123!"
 ```
+
+Change the example administrator password immediately; it is only a setup example and is not stored in the repository as a credential.
 
 Point Apache's document root to the repository's `public/` directory. Never expose the repository root as the web document root.
 
@@ -53,11 +56,13 @@ The application has no supported UI path that directly edits stock quantity. Sto
 ## Security
 
 - Passwords use PHP `password_hash()` / `password_verify()`.
+- Repeated failed login attempts are throttled.
 - SQL uses PDO prepared statements for request values.
 - State-changing forms use session CSRF tokens.
 - Navigation and protected routes enforce roles server-side.
 - `config/app.php` is git-ignored.
 - The production web root must be `public/`.
+- High-risk dispensing and adjustment actions are audit logged atomically using database triggers.
 
 ## Documentation
 
