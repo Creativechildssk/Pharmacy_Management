@@ -52,10 +52,15 @@ final class ReceiptService
 
                 if ($batch) {
                     $batchId = (int) $batch['id'];
-                    $update = $this->pdo->prepare("UPDATE medicine_batches SET quantity_received=quantity_received+:qty, quantity_available=quantity_available+:qty, purchase_rate=:rate, status='ACTIVE' WHERE id=:id");
-                    $update->execute(['qty' => $received, 'rate' => $item['purchase_rate'], 'id' => $batchId]);
+                    $update = $this->pdo->prepare("UPDATE medicine_batches SET quantity_received=quantity_received+:qty_received_add, quantity_available=quantity_available+:qty_available_add, purchase_rate=:rate, status='ACTIVE' WHERE id=:id");
+                    $update->execute([
+                        'qty_received_add' => $received,
+                        'qty_available_add' => $received,
+                        'rate' => $item['purchase_rate'],
+                        'id' => $batchId,
+                    ]);
                 } else {
-                    $insert = $this->pdo->prepare("INSERT INTO medicine_batches(medicine_id,batch_no,manufacture_date,expiry_date,purchase_rate,supplier_id,receipt_item_id,quantity_received,quantity_available,status) VALUES(:medicine_id,:batch_no,:manufacture_date,:expiry_date,:purchase_rate,:supplier_id,:receipt_item_id,:qty,:qty,'ACTIVE')");
+                    $insert = $this->pdo->prepare("INSERT INTO medicine_batches(medicine_id,batch_no,manufacture_date,expiry_date,purchase_rate,supplier_id,receipt_item_id,quantity_received,quantity_available,status) VALUES(:medicine_id,:batch_no,:manufacture_date,:expiry_date,:purchase_rate,:supplier_id,:receipt_item_id,:qty_received,:qty_available,'ACTIVE')");
                     $insert->execute([
                         'medicine_id' => $item['medicine_id'],
                         'batch_no' => $item['batch_no'],
@@ -64,7 +69,8 @@ final class ReceiptService
                         'purchase_rate' => $item['purchase_rate'],
                         'supplier_id' => $receipt['supplier_id'],
                         'receipt_item_id' => $item['id'],
-                        'qty' => $received,
+                        'qty_received' => $received,
+                        'qty_available' => $received,
                     ]);
                     $batchId = (int) $this->pdo->lastInsertId();
                 }
