@@ -1,6 +1,6 @@
 # Estate Pharmacy Management System
 
-A local-network estate dispensary application developed by **WFd DeepTech Labs Private Limited**.
+A local estate dispensary application developed by **WFd DeepTech Labs Private Limited**. It can run on a single completely isolated Windows pharmacy computer with no internet or LAN access, or on a small local network when required.
 
 ## What V1 does
 
@@ -17,13 +17,34 @@ A local-network estate dispensary application developed by **WFd DeepTech Labs P
 - Admin, Pharmacist, Store/Inventory and Management Viewer roles
 - Audit logging for authentication and high-risk stock/dispensing events
 - Local database backup script
-- Localhost / estate LAN deployment
+- Fully offline localhost deployment or estate LAN deployment
 
 ## Stack
 
 PHP 8.1+, MySQL/MariaDB, Apache, Bootstrap 5, SweetAlert2, DataTables and vanilla JavaScript.
 
-## Quick start
+## Fully offline USB deployment
+
+For a pharmacy PC with **no internet or network access**, build a complete USB package on an internet-connected Windows PC:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_offline_bundle.ps1
+```
+
+The generated ZIP under `dist/` contains the complete runtime application, Composer dependencies, local Bootstrap/SweetAlert2/DataTables assets, database SQL, checksums, and the Windows offline installer.
+
+You can optionally include a previously downloaded XAMPP installer:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_offline_bundle.ps1 `
+  -XamppInstaller "C:\Installers\xampp-windows-x64-installer.exe"
+```
+
+The repository also contains a GitHub Actions workflow named **Offline USB Bundle** that produces the ready-to-copy ZIP as a downloadable workflow artifact.
+
+See `docs/OFFLINE_INSTALL.md` for the complete isolated-machine procedure.
+
+## Developer quick start
 
 ```bash
 composer install
@@ -60,12 +81,14 @@ The application has no supported UI path that directly edits stock quantity. Sto
 - SQL uses PDO prepared statements for request values.
 - State-changing forms use session CSRF tokens.
 - Navigation and protected routes enforce roles server-side.
-- `config/app.php` is git-ignored.
+- `config/app.php` is git-ignored and excluded from offline bundles.
+- USB bundles include `SHA256SUMS.txt`, and the target installer verifies it before installation.
 - The production web root must be `public/`.
 - High-risk dispensing and adjustment actions are audit logged atomically using database triggers.
 
 ## Documentation
 
+- Offline USB installation: `docs/OFFLINE_INSTALL.md`
 - Design: `docs/superpowers/specs/2026-09-12-pharmacy-management-design.md`
 - Implementation plan: `docs/superpowers/plans/2026-09-12-pharmacy-management-v1.md`
 - Deployment: `docs/DEPLOYMENT.md`
