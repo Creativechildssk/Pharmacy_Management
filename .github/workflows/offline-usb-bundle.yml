@@ -1,0 +1,54 @@
+name: Offline USB Bundle
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/offline-usb-bundle
+    paths:
+      - '.github/workflows/offline-usb-bundle.yml'
+      - 'scripts/build_offline_bundle.ps1'
+      - 'scripts/install_offline_windows.ps1'
+      - 'docs/OFFLINE_INSTALL.md'
+      - 'composer.json'
+      - 'app/**'
+      - 'config/app.example.php'
+      - 'database/**'
+      - 'public/**'
+      - 'templates/**'
+
+jobs:
+  build-offline-usb:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring
+          coverage: none
+
+      - name: Build offline USB bundle
+        shell: powershell
+        run: .\scripts\build_offline_bundle.ps1 -OutputDirectory .\dist
+
+      - name: Verify ZIP was created
+        shell: powershell
+        run: |
+          $zips = @(Get-ChildItem .\dist\Pharmacy_Management_Offline_USB_*.zip)
+          if ($zips.Count -ne 1) { throw "Expected exactly one offline USB ZIP, found $($zips.Count)." }
+          Write-Host "Verified $($zips[0].FullName)"
+
+      - name: Upload ready-to-copy USB ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: pharmacy-management-offline-usb
+          path: dist/Pharmacy_Management_Offline_USB_*.zip
+          if-no-files-found: error
+          retention-days: 30
