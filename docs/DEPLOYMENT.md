@@ -35,12 +35,15 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON pharmacy_management.* TO 'pharmacy_user'@'l
 FLUSH PRIVILEGES;
 ```
 
-Import:
+Import all three database setup files in this order:
 
 ```bash
 mysql -u root -p pharmacy_management < database/schema.sql
 mysql -u root -p pharmacy_management < database/seed.sql
+mysql -u root -p pharmacy_management < database/audit_triggers.sql
 ```
+
+The audit triggers make prescription creation, dispensing, reversals, and stock-adjustment status changes part of the same database transaction as the operational record.
 
 ## 4. Frontend libraries
 
