@@ -6,6 +6,7 @@ on:
     branches:
       - feature/offline-usb-bundle
     paths:
+      - '.github/workflows/offline-usb-bundle.yml'
       - 'scripts/build_offline_bundle.ps1'
       - 'scripts/install_offline_windows.ps1'
       - 'docs/OFFLINE_INSTALL.md'
