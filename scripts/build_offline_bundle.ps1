@@ -7,6 +7,12 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {
+    $OutputDirectory = Join-Path $RepoRoot $OutputDirectory
+}
+New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
+$OutputDirectory = (Resolve-Path -LiteralPath $OutputDirectory).Path
+
 $Timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $BundleName = "Pharmacy_Management_Offline_USB_$Timestamp"
 $BundleRoot = Join-Path $OutputDirectory $BundleName
@@ -138,7 +144,6 @@ Get-ChildItem -LiteralPath $BundleRoot -Recurse -File |
 
 Assert-BundleFile 'SHA256SUMS.txt'
 
-New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 $zipPath = Join-Path $OutputDirectory "$BundleName.zip"
 if (Test-Path $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
 Compress-Archive -Path (Join-Path $BundleRoot '*') -DestinationPath $zipPath -CompressionLevel Optimal
