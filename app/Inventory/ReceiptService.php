@@ -6,6 +6,7 @@ namespace Pharmacy\Inventory;
 
 use DomainException;
 use PDO;
+use Pharmacy\Audit\AuditLogger;
 use Throwable;
 
 final class ReceiptService
@@ -84,6 +85,7 @@ final class ReceiptService
 
             $post = $this->pdo->prepare("UPDATE stock_receipts SET status='POSTED', posted_by=:user_id, posted_at=NOW() WHERE id=:id");
             $post->execute(['user_id' => $userId, 'id' => $receiptId]);
+            (new AuditLogger($this->pdo))->log($userId, 'POST', 'INVENTORY', 'stock_receipt', $receiptId, ['status'=>'DRAFT'], ['status'=>'POSTED','items'=>count($rows)], $_SERVER['REMOTE_ADDR'] ?? null);
             $this->pdo->commit();
         } catch (Throwable $e) {
             if ($this->pdo->inTransaction()) {
