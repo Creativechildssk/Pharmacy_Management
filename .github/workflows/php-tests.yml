@@ -36,5 +36,6 @@ jobs:
         run: |
           mysql -h127.0.0.1 -uroot -proot pharmacy_management_test < database/schema.sql
           mysql -h127.0.0.1 -uroot -proot pharmacy_management_test < database/seed.sql
+          mysql -h127.0.0.1 -uroot -proot pharmacy_management_test < database/audit_triggers.sql
       - name: PHPUnit
         run: vendor/bin/phpunit
