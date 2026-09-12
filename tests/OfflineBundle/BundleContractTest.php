@@ -14,6 +14,7 @@ final class BundleContractTest extends TestCase
 
         self::assertFileExists($root . '/scripts/build_offline_bundle.ps1');
         self::assertFileExists($root . '/scripts/install_offline_windows.ps1');
+        self::assertFileExists($root . '/scripts/INSTALL_OFFLINE_WINDOWS.bat');
         self::assertFileExists($root . '/docs/OFFLINE_INSTALL.md');
     }
 
@@ -31,6 +32,7 @@ final class BundleContractTest extends TestCase
             'database/audit_triggers.sql',
             'SHA256SUMS.txt',
             'OFFLINE_INSTALL.md',
+            'INSTALL_OFFLINE_WINDOWS.bat',
         ] as $required) {
             self::assertStringContainsString($required, $script);
         }
@@ -54,6 +56,35 @@ final class BundleContractTest extends TestCase
         self::assertIsString($script);
         self::assertStringContainsString('$OutputDirectory = (Resolve-Path -LiteralPath $OutputDirectory).Path', $script);
         self::assertStringContainsString('$relative = $_.FullName.Substring($BundleRoot.Length + 1)', $script);
+    }
+
+    public function test_batch_launcher_invokes_powershell_with_execution_policy_bypass(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $bat = file_get_contents($root . '/scripts/INSTALL_OFFLINE_WINDOWS.bat');
+        self::assertIsString($bat);
+        self::assertStringContainsString('-ExecutionPolicy Bypass', $bat);
+        self::assertStringContainsString('INSTALL_OFFLINE_WINDOWS.ps1', $bat);
+        self::assertStringContainsString('pause', strtolower($bat));
+    }
+
+    public function test_windows_installer_prompts_for_mysql_and_database_settings(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $script = file_get_contents($root . '/scripts/install_offline_windows.ps1');
+        self::assertIsString($script);
+
+        foreach ([
+            'MySQL administrator username',
+            'MySQL administrator password',
+            'Database name',
+            'Application DB username',
+            'Application DB password',
+            'XAMPP path',
+            'Test-MySqlConnection',
+        ] as $required) {
+            self::assertStringContainsString($required, $script);
+        }
     }
 
     public function test_offline_install_doc_requires_no_network_on_target_machine(): void

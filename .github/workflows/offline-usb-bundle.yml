@@ -4,11 +4,13 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/offline-usb-bundle
+      - main
+      - 'feature/**'
     paths:
       - '.github/workflows/offline-usb-bundle.yml'
       - 'scripts/build_offline_bundle.ps1'
       - 'scripts/install_offline_windows.ps1'
+      - 'scripts/INSTALL_OFFLINE_WINDOWS.bat'
       - 'docs/OFFLINE_INSTALL.md'
       - 'composer.json'
       - 'app/**'

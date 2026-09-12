@@ -10,12 +10,7 @@ Open PowerShell in the repository root and run:
 powershell -ExecutionPolicy Bypass -File .\scripts\build_offline_bundle.ps1
 ```
 
-The builder creates both an extracted folder and a ZIP under `dist/`, for example:
-
-```text
-Pharmacy_Management_Offline_USB_20260912-110000\
-Pharmacy_Management_Offline_USB_20260912-110000.zip
-```
+The builder creates an extracted folder and a ZIP under `dist/`.
 
 The package includes:
 
@@ -25,7 +20,8 @@ The package includes:
 - `app/database/schema.sql`
 - `app/database/seed.sql`
 - `app/database/audit_triggers.sql`
-- `INSTALL_OFFLINE_WINDOWS.ps1`
+- `INSTALL_OFFLINE_WINDOWS.bat` — double-click launcher
+- `INSTALL_OFFLINE_WINDOWS.ps1` — installer engine
 - `OFFLINE_INSTALL.md`
 - `MANIFEST.json`
 - `SHA256SUMS.txt`
@@ -41,93 +37,75 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_offline_bundle.ps1 `
   -XamppInstaller "C:\Installers\xampp-windows-x64-installer.exe"
 ```
 
-The installer is copied into the bundle under `installer/`. The builder does not download or silently install XAMPP for you.
+The installer is copied under `installer/`.
 
-## 3. Copy the package to USB
-
-Copy either the ZIP or the extracted bundle directory to a clean USB drive. Keep `SHA256SUMS.txt` with the bundle; the offline installer verifies all packaged files before installation.
-
-For a controlled environment, label the USB with the bundle date and keep it as the installation master.
-
-## 4. Prepare the isolated pharmacy computer
+## 3. Prepare the isolated pharmacy computer
 
 If XAMPP is not already installed:
 
-1. Run the XAMPP installer from the USB.
-2. Install to the normal location `C:\xampp` unless your IT policy requires another path.
-3. Start **MySQL** from the XAMPP Control Panel.
-4. Apache can remain stopped until the application installation is complete.
+1. Install XAMPP from the USB.
+2. Start **MySQL** from the XAMPP Control Panel.
+3. Apache can remain stopped until application installation is complete.
 
-No internet connection is needed for these steps.
+No internet connection is needed.
 
-## 5. Install the pharmacy application from USB
+## 4. Install the pharmacy application
 
-Extract the bundle if necessary. Open **PowerShell as Administrator** in the extracted bundle folder and run:
+Extract the USB bundle to a normal local folder such as `C:\PharmacyUSB`.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\INSTALL_OFFLINE_WINDOWS.ps1
+Double-click:
+
+```text
+INSTALL_OFFLINE_WINDOWS.bat
 ```
 
-The installer will:
+The BAT launcher starts the PowerShell installer with a one-process execution-policy bypass, so you do not need to change the computer's permanent PowerShell policy.
 
-1. Verify the USB package against `SHA256SUMS.txt`.
-2. Confirm XAMPP PHP and MySQL exist locally.
-3. Copy the production application to `C:\xampp\htdocs\Pharmacy_Management`.
-4. Generate a random local database password.
-5. Create the `pharmacy_management` database and least-privilege `pharmacy_user` account.
-6. Import `database/schema.sql`.
-7. Import `database/seed.sql`.
-8. Import `database/audit_triggers.sql`.
-9. Generate the local `config/app.php` file.
+The installer first verifies `SHA256SUMS.txt`, then asks interactively for:
 
-If your XAMPP MySQL root account has a password, supply it when launching the installer:
+1. **XAMPP path** — default `C:\xampp`
+2. **MySQL administrator username** — default `root`
+3. **MySQL administrator password** — hidden while typing; blank is allowed
+4. **Database name** — default `pharmacy_management`
+5. **Application DB username** — default `pharmacy_user`
+6. **Application DB password** — hidden while typing; press Enter to auto-generate a strong password
+7. **Application install path** — defaults to the XAMPP `htdocs\Pharmacy_Management` folder
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\INSTALL_OFFLINE_WINDOWS.ps1 -MySqlRootPassword "YOUR-LOCAL-MYSQL-ROOT-PASSWORD"
-```
+The installer tests the MySQL administrator connection **before** creating or importing anything. If the credentials are wrong, installation stops safely and you can rerun the BAT file.
 
-Do not write the MySQL root password into documentation or leave it in a saved PowerShell command history on a shared computer.
+The application DB username must be different from the MySQL administrator username.
 
-## 6. Create the first Admin user
+After confirmation, the installer:
 
-After the offline installer completes, run this from Command Prompt or PowerShell, replacing the example password:
+- copies the production application
+- creates the selected database
+- creates/updates the least-privilege application DB user
+- imports `schema.sql`
+- imports `seed.sql`
+- imports `audit_triggers.sql`
+- writes the local `config/app.php`
+
+Do not edit `INSTALL_OFFLINE_WINDOWS.ps1`, `INSTALL_OFFLINE_WINDOWS.bat`, or other files inside the verified bundle. Any change will correctly cause checksum verification to fail.
+
+## 5. Create the first Admin user
+
+After the installer completes, run the command it prints on screen. With the default XAMPP/application paths it is:
 
 ```text
 C:\xampp\php\php.exe C:\xampp\htdocs\Pharmacy_Management\scripts\create_admin.php admin "Pharmacy Administrator" "Choose-A-Strong-Password"
 ```
 
-The password is stored only as a PHP password hash in MySQL.
+## 6. Start and open the system
 
-## 7. Start and open the system
-
-Start **Apache** and **MySQL** from the XAMPP Control Panel.
-
-Open the browser on the same isolated PC:
+Start **Apache** and **MySQL** from the XAMPP Control Panel, then open:
 
 ```text
 http://localhost/Pharmacy_Management/public/
 ```
 
-Sign in with the Admin account created in the previous step.
+Normal pharmacy operation requires no internet connection and no LAN connection.
 
-## 8. Offline operating model
-
-Normal pharmacy use requires no internet connection and no LAN connection. The following functions remain local to the pharmacy computer:
-
-- employee and external-patient records
-- visiting-doctor prescriptions
-- medicine and supplier masters
-- stock receipts
-- batch and expiry tracking
-- FEFO dispensing
-- stock adjustments and reversals
-- audit logs
-- reports and CSV exports
-- database backups
-
-The application does not need an external API, CDN, cloud database, or web service during normal operation.
-
-## 9. Backup on an isolated machine
+## 7. Backup on the isolated machine
 
 Run:
 
@@ -135,16 +113,8 @@ Run:
 C:\xampp\php\php.exe C:\xampp\htdocs\Pharmacy_Management\scripts\backup.php
 ```
 
-The SQL backup is created under:
+Backups are stored under `storage\backups\`. Copy them periodically to a separate approved offline storage device.
 
-```text
-C:\xampp\htdocs\Pharmacy_Management\storage\backups\
-```
+## 8. Updating later
 
-Copy backups periodically to a separate approved encrypted USB drive or other offline storage. Do not keep the only backup on the same pharmacy computer.
-
-## 10. Updating the isolated installation later
-
-Do not connect the pharmacy computer to the internet just to update the application. Build a new signed/checksummed offline USB bundle on an internet-connected development computer, test it separately, then transfer the approved release by USB.
-
-Before any future application update, take and verify a database backup first.
+Do not connect the pharmacy computer to the internet for updates. Build and verify a new USB bundle on an internet-connected development computer, take a database backup, then transfer the approved release by USB.
