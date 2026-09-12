@@ -24,6 +24,7 @@ $canReports=Authorization::hasRole('ADMIN','PHARMACIST','INVENTORY','MANAGEMENT_
     <?php endif; ?>
     <?php if ($canReports): ?><a class="nav-link" href="/reports/index.php">Reports</a><?php endif; ?>
     <?php if ($canAdmin): ?>
+      <a class="nav-link text-danger" href="/inventory/reversals.php">Reversal Center</a>
       <a class="nav-link" href="/users/index.php">Users</a>
       <a class="nav-link" href="/settings/index.php">Settings</a>
       <a class="nav-link" href="/reports/audit-log.php">Audit Log</a>
