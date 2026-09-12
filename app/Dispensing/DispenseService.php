@@ -31,11 +31,16 @@ final class DispenseService
         $this->pdo->beginTransaction();
         try {
             $this->validatePatient($patientType, $command);
+            $prescriptionId = !empty($command['prescription_id']) ? (int) $command['prescription_id'] : null;
+            if ($prescriptionId !== null) {
+                $this->validatePrescriptionHeader($prescriptionId, $patientType, $command);
+            }
+
             $dispenseNo = $command['dispense_no'] ?? ('DSP-' . date('YmdHis') . '-' . random_int(100,999));
             $header = $this->pdo->prepare("INSERT INTO dispenses(dispense_no,prescription_id,patient_type,employee_id,external_patient_id,dispense_at,status,pharmacist_id,remarks) VALUES(:no,:prescription_id,:patient_type,:employee_id,:external_patient_id,NOW(),'POSTED',:pharmacist_id,:remarks)");
             $header->execute([
                 'no' => $dispenseNo,
-                'prescription_id' => $command['prescription_id'] ?? null,
+                'prescription_id' => $prescriptionId,
                 'patient_type' => $patientType,
                 'employee_id' => $patientType === 'EMPLOYEE' ? $command['employee_id'] : null,
                 'external_patient_id' => $patientType === 'EXTERNAL' ? $command['external_patient_id'] : null,
@@ -58,8 +63,11 @@ final class DispenseService
                 }
 
                 $prescriptionItemId = isset($item['prescription_item_id']) ? (int) $item['prescription_item_id'] : null;
+                if ($prescriptionId !== null && $prescriptionItemId === null) {
+                    throw new DomainException('Every prescription dispense item must reference its prescription item');
+                }
                 if ($prescriptionItemId !== null) {
-                    $this->validatePrescriptionItem($command['prescription_id'] ?? null, $prescriptionItemId, $medicineId, $quantity);
+                    $this->validatePrescriptionItem($prescriptionId, $prescriptionItemId, $medicineId, $quantity);
                 }
 
                 $batchStmt = $this->pdo->prepare("SELECT id,expiry_date,quantity_available,purchase_rate,status FROM medicine_batches WHERE medicine_id=:medicine_id AND quantity_available>0 AND expiry_date>=CURDATE() AND status='ACTIVE' ORDER BY expiry_date ASC,id ASC FOR UPDATE");
@@ -67,8 +75,13 @@ final class DispenseService
                 $allocations = $this->allocator->allocate($batchStmt->fetchAll(), $quantity, date('Y-m-d'));
 
                 foreach ($allocations as $allocation) {
-                    $decrement = $this->pdo->prepare("UPDATE medicine_batches SET quantity_available=quantity_available-:qty, status=CASE WHEN quantity_available-:qty<=0 THEN 'DEPLETED' ELSE status END WHERE id=:id AND quantity_available>=:qty");
-                    $decrement->execute(['qty' => $allocation['quantity'], 'id' => $allocation['batch_id']]);
+                    $decrement = $this->pdo->prepare("UPDATE medicine_batches SET quantity_available=quantity_available-:qty_decrement, status=CASE WHEN quantity_available-:qty_status<=0 THEN 'DEPLETED' ELSE status END WHERE id=:id AND quantity_available>=:qty_available");
+                    $decrement->execute([
+                        'qty_decrement' => $allocation['quantity'],
+                        'qty_status' => $allocation['quantity'],
+                        'id' => $allocation['batch_id'],
+                        'qty_available' => $allocation['quantity'],
+                    ]);
                     if ($decrement->rowCount() !== 1) {
                         throw new DomainException('Stock changed while dispensing; please retry');
                     }
@@ -105,8 +118,8 @@ final class DispenseService
                 }
             }
 
-            if (!empty($command['prescription_id'])) {
-                $this->refreshPrescriptionStatus((int) $command['prescription_id']);
+            if ($prescriptionId !== null) {
+                $this->refreshPrescriptionStatus($prescriptionId);
             }
 
             $this->pdo->commit();
@@ -147,7 +160,7 @@ final class DispenseService
                     'transaction_value' => (float) $item['total_cost'],
                     'source_type' => 'DISPENSE_REVERSAL',
                     'source_id' => $dispenseId,
-                    'reason' => $reason,
+                    'reason' => trim($reason),
                     'user_id' => $userId,
                 ]);
                 if ($item['prescription_item_id']) {
@@ -156,7 +169,7 @@ final class DispenseService
                 }
             }
             $mark = $this->pdo->prepare("UPDATE dispenses SET status='REVERSED',reversed_by=:user_id,reversed_at=NOW(),remarks=CONCAT(COALESCE(remarks,''),' | Reversal: ',:reason) WHERE id=:id");
-            $mark->execute(['user_id' => $userId, 'reason' => $reason, 'id' => $dispenseId]);
+            $mark->execute(['user_id' => $userId, 'reason' => trim($reason), 'id' => $dispenseId]);
             if ($dispense['prescription_id']) {
                 $this->refreshPrescriptionStatus((int) $dispense['prescription_id']);
             }
@@ -177,6 +190,24 @@ final class DispenseService
         $stmt->execute(['id' => $command[$key] ?? 0]);
         if (!$stmt->fetchColumn()) {
             throw new DomainException('Patient is inactive or unavailable');
+        }
+    }
+
+    private function validatePrescriptionHeader(int $prescriptionId, string $patientType, array $command): void
+    {
+        $stmt = $this->pdo->prepare('SELECT patient_type,employee_id,external_patient_id,status FROM prescriptions WHERE id=:id FOR UPDATE');
+        $stmt->execute(['id' => $prescriptionId]);
+        $prescription = $stmt->fetch();
+        if (!$prescription || !in_array($prescription['status'], ['OPEN','PARTIALLY_DISPENSED'], true)) {
+            throw new DomainException('Prescription is not open for dispensing');
+        }
+        if ($prescription['patient_type'] !== $patientType) {
+            throw new DomainException('Prescription patient does not match the dispensing patient');
+        }
+        $expectedPatientId = $patientType === 'EMPLOYEE' ? (int) $prescription['employee_id'] : (int) $prescription['external_patient_id'];
+        $commandPatientId = $patientType === 'EMPLOYEE' ? (int) ($command['employee_id'] ?? 0) : (int) ($command['external_patient_id'] ?? 0);
+        if ($expectedPatientId !== $commandPatientId) {
+            throw new DomainException('Prescription patient does not match the dispensing patient');
         }
     }
 
@@ -201,7 +232,7 @@ final class DispenseService
         $prescribed = (float) ($totals['prescribed'] ?? 0);
         $dispensed = (float) ($totals['dispensed'] ?? 0);
         $status = $dispensed <= 0 ? 'OPEN' : ($dispensed + 0.000001 >= $prescribed ? 'DISPENSED' : 'PARTIALLY_DISPENSED');
-        $update = $this->pdo->prepare('UPDATE prescriptions SET status=:status WHERE id=:id');
+        $update = $this->pdo->prepare("UPDATE prescriptions SET status=:status WHERE id=:id AND status<>'CANCELLED'");
         $update->execute(['status' => $status, 'id' => $prescriptionId]);
     }
 }
