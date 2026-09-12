@@ -47,6 +47,15 @@ final class BundleContractTest extends TestCase
         }
     }
 
+    public function test_builder_normalizes_output_directory_before_checksum_relative_paths(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $script = file_get_contents($root . '/scripts/build_offline_bundle.ps1');
+        self::assertIsString($script);
+        self::assertStringContainsString('$OutputDirectory = (Resolve-Path -LiteralPath $OutputDirectory).Path', $script);
+        self::assertStringContainsString('$relative = $_.FullName.Substring($BundleRoot.Length + 1)', $script);
+    }
+
     public function test_offline_install_doc_requires_no_network_on_target_machine(): void
     {
         $root = dirname(__DIR__, 2);
