@@ -86,6 +86,7 @@ Download-File 'https://cdn.datatables.net/2.3.4/js/dataTables.min.js' (Join-Path
 
 Copy-Item -LiteralPath (Join-Path $RepoRoot 'docs/OFFLINE_INSTALL.md') -Destination (Join-Path $BundleRoot 'OFFLINE_INSTALL.md') -Force
 Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts/install_offline_windows.ps1') -Destination (Join-Path $BundleRoot 'INSTALL_OFFLINE_WINDOWS.ps1') -Force
+Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts/INSTALL_OFFLINE_WINDOWS.bat') -Destination (Join-Path $BundleRoot 'INSTALL_OFFLINE_WINDOWS.bat') -Force
 
 if ($XamppInstaller -ne '') {
     if (-not (Test-Path -LiteralPath $XamppInstaller -PathType Leaf)) {
@@ -122,6 +123,7 @@ foreach ($required in @(
     'app/database/audit_triggers.sql',
     'OFFLINE_INSTALL.md',
     'INSTALL_OFFLINE_WINDOWS.ps1',
+    'INSTALL_OFFLINE_WINDOWS.bat',
     'MANIFEST.json'
 )) {
     Assert-BundleFile $required
