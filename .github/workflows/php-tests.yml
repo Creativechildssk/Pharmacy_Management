@@ -38,4 +38,8 @@ jobs:
           mysql -h127.0.0.1 -uroot -proot pharmacy_management_test < database/seed.sql
           mysql -h127.0.0.1 -uroot -proot pharmacy_management_test < database/audit_triggers.sql
       - name: PHPUnit
+        env:
+          TEST_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=pharmacy_management_test;charset=utf8mb4
+          TEST_DB_USER: root
+          TEST_DB_PASSWORD: root
         run: vendor/bin/phpunit
