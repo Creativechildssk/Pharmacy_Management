@@ -2,6 +2,17 @@
 use Pharmacy\Auth\Authorization;
 $title = $title ?? 'Estate Pharmacy Management System';
 $user = $_SESSION['user'] ?? null;
+$estateName = 'Estate Pharmacy';
+try {
+    if (isset($pdo)) {
+        $setting = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key='estate_name' LIMIT 1")->fetchColumn();
+        if (is_string($setting) && trim($setting) !== '') {
+            $estateName = $setting;
+        }
+    }
+} catch (Throwable) {
+    // Keep safe default during initial setup.
+}
 ?><!doctype html>
 <html lang="en">
 <head>
@@ -15,7 +26,7 @@ $user = $_SESSION['user'] ?? null;
 <body class="bg-light">
 <nav class="navbar navbar-dark bg-dark navbar-expand-lg sticky-top">
   <div class="container-fluid">
-    <a class="navbar-brand fw-semibold" href="/dashboard.php">Estate Pharmacy</a>
+    <a class="navbar-brand fw-semibold" href="/dashboard.php"><?= htmlspecialchars($estateName) ?></a>
     <?php if ($user): ?><span class="navbar-text text-light small"><?= htmlspecialchars($user['full_name']) ?></span><?php endif; ?>
   </div>
 </nav>
