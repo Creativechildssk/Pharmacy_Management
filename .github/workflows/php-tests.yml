@@ -9,6 +9,19 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: pharmacy_management_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -17,4 +30,11 @@ jobs:
           extensions: pdo_mysql, mbstring
           coverage: none
       - run: composer install --no-interaction --prefer-dist
-      - run: vendor/bin/phpunit
+      - name: PHP syntax validation
+        run: find app config public scripts templates tests -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Import database schema
+        run: |
+          mysql -h127.0.0.1 -uroot -proot pharmacy_management_test < database/schema.sql
+          mysql -h127.0.0.1 -uroot -proot pharmacy_management_test < database/seed.sql
+      - name: PHPUnit
+        run: vendor/bin/phpunit
