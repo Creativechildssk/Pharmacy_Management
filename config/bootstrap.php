@@ -13,6 +13,16 @@ if (!is_file($configFile)) {
 }
 $config = require $configFile;
 date_default_timezone_set($config['app']['timezone'] ?? 'Asia/Kolkata');
+$pdo = Connection::fromConfig($config['database']);
+
+$systemSettings = [];
+try {
+    foreach ($pdo->query('SELECT setting_key, setting_value FROM system_settings')->fetchAll() as $setting) {
+        $systemSettings[$setting['setting_key']] = $setting['setting_value'];
+    }
+} catch (Throwable) {
+    // Initial installation may load configuration before seed data exists.
+}
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_set_cookie_params([
@@ -23,7 +33,8 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
-$timeout = (int)($config['app']['session_timeout_minutes'] ?? 30) * 60;
+$timeoutMinutes = (int)($systemSettings['session_timeout_minutes'] ?? $config['app']['session_timeout_minutes'] ?? 30);
+$timeout = max(1, $timeoutMinutes) * 60;
 if (!empty($_SESSION['user']['last_activity']) && time() - (int)$_SESSION['user']['last_activity'] > $timeout) {
     $_SESSION = [];
     session_destroy();
@@ -32,5 +43,3 @@ if (!empty($_SESSION['user']['last_activity']) && time() - (int)$_SESSION['user'
 if (!empty($_SESSION['user'])) {
     $_SESSION['user']['last_activity'] = time();
 }
-
-$pdo = Connection::fromConfig($config['database']);
