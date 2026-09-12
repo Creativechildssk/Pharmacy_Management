@@ -13,6 +13,7 @@ final class BundleContractTest extends TestCase
         $root = dirname(__DIR__, 2);
 
         self::assertFileExists($root . '/scripts/build_offline_bundle.ps1');
+        self::assertFileExists($root . '/scripts/install_offline_windows.ps1');
         self::assertFileExists($root . '/docs/OFFLINE_INSTALL.md');
     }
 
@@ -55,5 +56,19 @@ final class BundleContractTest extends TestCase
         self::assertStringContainsString('USB', $doc);
         self::assertStringContainsString('schema.sql', $doc);
         self::assertStringContainsString('audit_triggers.sql', $doc);
+    }
+
+    public function test_github_workflow_builds_and_uploads_offline_zip(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $workflow = $root . '/.github/workflows/offline-usb-bundle.yml';
+        self::assertFileExists($workflow);
+
+        $yaml = file_get_contents($workflow);
+        self::assertIsString($yaml);
+        self::assertStringContainsString('windows-latest', $yaml);
+        self::assertStringContainsString('build_offline_bundle.ps1', $yaml);
+        self::assertStringContainsString('actions/upload-artifact@v4', $yaml);
+        self::assertStringContainsString('Pharmacy_Management_Offline_USB_*.zip', $yaml);
     }
 }
