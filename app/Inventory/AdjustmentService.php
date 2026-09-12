@@ -42,15 +42,16 @@ final class AdjustmentService
             $adjustmentId = (int) $this->pdo->lastInsertId();
 
             if ($isOut) {
-                $update = $this->pdo->prepare("UPDATE medicine_batches SET quantity_available=quantity_available-:qty, status=CASE WHEN quantity_available-:qty<=0 THEN 'DEPLETED' ELSE status END WHERE id=:id");
+                $update = $this->pdo->prepare("UPDATE medicine_batches SET quantity_available=quantity_available-:qty_decrement, status=CASE WHEN quantity_available-:qty_status<=0 THEN 'DEPLETED' ELSE status END WHERE id=:id");
+                $update->execute(['qty_decrement' => $quantity, 'qty_status' => $quantity, 'id' => $batchId]);
                 $quantityIn = 0;
                 $quantityOut = $quantity;
             } else {
-                $update = $this->pdo->prepare("UPDATE medicine_batches SET quantity_available=quantity_available+:qty, status=CASE WHEN expiry_date<CURDATE() THEN 'EXPIRED' ELSE 'ACTIVE' END WHERE id=:id");
+                $update = $this->pdo->prepare("UPDATE medicine_batches SET quantity_available=quantity_available+:qty_increment, status=CASE WHEN expiry_date<CURDATE() THEN 'EXPIRED' ELSE 'ACTIVE' END WHERE id=:id");
+                $update->execute(['qty_increment' => $quantity, 'id' => $batchId]);
                 $quantityIn = $quantity;
                 $quantityOut = 0;
             }
-            $update->execute(['qty' => $quantity, 'id' => $batchId]);
 
             $this->ledger->record([
                 'transaction_type' => $type,
@@ -96,10 +97,13 @@ final class AdjustmentService
             }
 
             $delta = (float) $row['quantity'];
-            $sql = $originalWasOut
-                ? "UPDATE medicine_batches SET quantity_available=quantity_available+:qty, status=CASE WHEN expiry_date<CURDATE() THEN 'EXPIRED' ELSE 'ACTIVE' END WHERE id=:id"
-                : "UPDATE medicine_batches SET quantity_available=quantity_available-:qty, status=CASE WHEN quantity_available-:qty<=0 THEN 'DEPLETED' ELSE status END WHERE id=:id";
-            $this->pdo->prepare($sql)->execute(['qty' => $delta, 'id' => $row['batch_id']]);
+            if ($originalWasOut) {
+                $restore = $this->pdo->prepare("UPDATE medicine_batches SET quantity_available=quantity_available+:qty_restore, status=CASE WHEN expiry_date<CURDATE() THEN 'EXPIRED' ELSE 'ACTIVE' END WHERE id=:id");
+                $restore->execute(['qty_restore' => $delta, 'id' => $row['batch_id']]);
+            } else {
+                $remove = $this->pdo->prepare("UPDATE medicine_batches SET quantity_available=quantity_available-:qty_remove, status=CASE WHEN quantity_available-:qty_status<=0 THEN 'DEPLETED' ELSE status END WHERE id=:id");
+                $remove->execute(['qty_remove' => $delta, 'qty_status' => $delta, 'id' => $row['batch_id']]);
+            }
 
             $this->ledger->record([
                 'transaction_type' => 'REVERSAL',
