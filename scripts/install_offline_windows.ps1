@@ -1,9 +1,10 @@
 param(
-    [string]$XamppPath = 'C:\xampp',
-    [string]$InstallPath = 'C:\xampp\htdocs\Pharmacy_Management',
-    [string]$DatabaseName = 'pharmacy_management',
-    [string]$DatabaseUser = 'pharmacy_user',
-    [string]$MySqlRootUser = 'root',
+    [string]$XamppPath = '',
+    [string]$InstallPath = '',
+    [string]$DatabaseName = '',
+    [string]$DatabaseUser = '',
+    [string]$DatabasePassword = '',
+    [string]$MySqlRootUser = '',
     [string]$MySqlRootPassword = '',
     [switch]$ForceInstall
 )
@@ -14,8 +15,49 @@ Set-StrictMode -Version Latest
 $BundleRoot = $PSScriptRoot
 $SourceApp = Join-Path $BundleRoot 'app'
 $ChecksumFile = Join-Path $BundleRoot 'SHA256SUMS.txt'
-$MySqlExe = Join-Path $XamppPath 'mysql\bin\mysql.exe'
-$PhpExe = Join-Path $XamppPath 'php\php.exe'
+
+function Read-TextSetting {
+    param(
+        [string]$Label,
+        [string]$DefaultValue
+    )
+
+    $prompt = if ($DefaultValue -ne '') { "$Label [$DefaultValue]" } else { $Label }
+    $value = (Read-Host $prompt).Trim()
+    if ($value -eq '') { return $DefaultValue }
+    return $value
+}
+
+function Read-PlainSecret {
+    param([string]$Label)
+
+    $secure = Read-Host $Label -AsSecureString
+    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+    }
+}
+
+function New-RandomPassword {
+    $alphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#%_-'
+    $randomBytes = New-Object byte[] 32
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($randomBytes)
+    } finally {
+        $rng.Dispose()
+    }
+    return -join ($randomBytes | ForEach-Object { $alphabet[$_ % $alphabet.Length] })
+}
+
+function Assert-SimpleIdentifier {
+    param([string]$Label, [string]$Value)
+    if ($Value -notmatch '^[A-Za-z0-9_]+$') {
+        throw "$Label may contain only letters, numbers and underscore."
+    }
+}
 
 function Convert-ToSqlLiteral([string]$Value) {
     return $Value.Replace("'", "''")
@@ -26,8 +68,21 @@ function Invoke-MySqlText {
     $args = @('-u', $MySqlRootUser)
     if ($MySqlRootPassword -ne '') { $args += "--password=$MySqlRootPassword" }
     $args += @('--default-character-set=utf8mb4', '-e', $Sql)
-    & $MySqlExe @args
-    if ($LASTEXITCODE -ne 0) { throw 'MySQL command failed. Confirm MySQL is running and the root credentials are correct.' }
+    & $script:MySqlExe @args
+    if ($LASTEXITCODE -ne 0) {
+        throw 'MySQL command failed. Confirm MySQL is running and the administrator credentials are correct.'
+    }
+}
+
+function Test-MySqlConnection {
+    $args = @('-u', $MySqlRootUser)
+    if ($MySqlRootPassword -ne '') { $args += "--password=$MySqlRootPassword" }
+    $args += @('--default-character-set=utf8mb4', '--batch', '--skip-column-names', '-e', 'SELECT 1;')
+
+    $output = & $script:MySqlExe @args 2>&1
+    if ($LASTEXITCODE -ne 0 -or (($output | Out-String).Trim() -notmatch '(^|\s)1(\s|$)')) {
+        throw "Unable to connect to MySQL with the supplied administrator username/password. MySQL said: $($output | Out-String)"
+    }
 }
 
 function Import-MySqlFile {
@@ -35,7 +90,7 @@ function Import-MySqlFile {
     $args = @('-u', $MySqlRootUser)
     if ($MySqlRootPassword -ne '') { $args += "--password=$MySqlRootPassword" }
     $args += @('--default-character-set=utf8mb4', $Database)
-    Get-Content -LiteralPath $File -Raw | & $MySqlExe @args
+    Get-Content -LiteralPath $File -Raw | & $script:MySqlExe @args
     if ($LASTEXITCODE -ne 0) { throw "Failed importing $File" }
 }
 
@@ -58,33 +113,86 @@ Write-Host ''
 
 Test-BundleChecksums
 Write-Host 'USB bundle checksum verification passed.' -ForegroundColor Green
+Write-Host ''
 
 if (-not (Test-Path -LiteralPath $SourceApp -PathType Container)) { throw 'The app folder is missing from the USB bundle.' }
-if (-not (Test-Path -LiteralPath $MySqlExe -PathType Leaf)) { throw "MySQL was not found at $MySqlExe. Install XAMPP from the USB first." }
-if (-not (Test-Path -LiteralPath $PhpExe -PathType Leaf)) { throw "PHP was not found at $PhpExe. Install XAMPP from the USB first." }
+
+Write-Host 'Installation settings' -ForegroundColor Yellow
+Write-Host 'Press Enter to accept a value shown in [brackets]. Password input is hidden.'
+Write-Host ''
+
+if ($XamppPath -eq '') {
+    $XamppPath = Read-TextSetting -Label 'XAMPP path' -DefaultValue 'C:\xampp'
+}
+$MySqlExe = Join-Path $XamppPath 'mysql\bin\mysql.exe'
+$PhpExe = Join-Path $XamppPath 'php\php.exe'
+if (-not (Test-Path -LiteralPath $MySqlExe -PathType Leaf)) { throw "MySQL was not found at $MySqlExe. Install XAMPP first or enter the correct XAMPP path." }
+if (-not (Test-Path -LiteralPath $PhpExe -PathType Leaf)) { throw "PHP was not found at $PhpExe. Install XAMPP first or enter the correct XAMPP path." }
+
+if ($MySqlRootUser -eq '') {
+    $MySqlRootUser = Read-TextSetting -Label 'MySQL administrator username' -DefaultValue 'root'
+}
+if ($MySqlRootPassword -eq '') {
+    $MySqlRootPassword = Read-PlainSecret -Label 'MySQL administrator password (press Enter if blank)'
+}
+
+Write-Host ''
+Write-Host 'Testing MySQL administrator connection...'
+Test-MySqlConnection
+Write-Host 'MySQL connection successful.' -ForegroundColor Green
+Write-Host ''
+
+if ($DatabaseName -eq '') {
+    $DatabaseName = Read-TextSetting -Label 'Database name' -DefaultValue 'pharmacy_management'
+}
+if ($DatabaseUser -eq '') {
+    $DatabaseUser = Read-TextSetting -Label 'Application DB username' -DefaultValue 'pharmacy_user'
+}
+Assert-SimpleIdentifier -Label 'Database name' -Value $DatabaseName
+Assert-SimpleIdentifier -Label 'Application DB username' -Value $DatabaseUser
+
+if ($DatabaseUser.Equals($MySqlRootUser, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Application DB username must be different from the MySQL administrator username.'
+}
+
+if ($DatabasePassword -eq '') {
+    $DatabasePassword = Read-PlainSecret -Label 'Application DB password (press Enter to auto-generate)'
+}
+if ($DatabasePassword -eq '') {
+    $DatabasePassword = New-RandomPassword
+    Write-Host 'A strong application DB password was generated automatically.' -ForegroundColor Green
+}
+
+if ($InstallPath -eq '') {
+    $defaultInstallPath = Join-Path $XamppPath 'htdocs\Pharmacy_Management'
+    $InstallPath = Read-TextSetting -Label 'Application install path' -DefaultValue $defaultInstallPath
+}
+
+Write-Host ''
+Write-Host 'Installer summary:' -ForegroundColor Cyan
+Write-Host "  XAMPP:          $XamppPath"
+Write-Host "  Install path:   $InstallPath"
+Write-Host "  MySQL admin:    $MySqlRootUser"
+Write-Host "  Database:       $DatabaseName"
+Write-Host "  App DB user:    $DatabaseUser"
+Write-Host ''
+$confirmation = (Read-Host 'Continue with installation? [Y/n]').Trim()
+if ($confirmation -ne '' -and $confirmation -notmatch '^[Yy]') {
+    throw 'Installation cancelled by user.'
+}
 
 if (Test-Path -LiteralPath $InstallPath) {
     $hasFiles = (Get-ChildItem -LiteralPath $InstallPath -Force -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
     if ($hasFiles -and -not $ForceInstall) {
-        throw "Install path already contains files: $InstallPath. For safety, use a fresh folder or rerun with -ForceInstall only if you intend to replace the application files."
+        throw "Install path already contains files: $InstallPath. Use a fresh folder, or run with -ForceInstall only if you intentionally want to replace the application files."
     }
 }
 New-Item -ItemType Directory -Force -Path $InstallPath | Out-Null
 Copy-Item -Path (Join-Path $SourceApp '*') -Destination $InstallPath -Recurse -Force
 
-$alphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#%_-'
-$randomBytes = New-Object byte[] 32
-$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
-try {
-    $rng.GetBytes($randomBytes)
-} finally {
-    $rng.Dispose()
-}
-$databasePassword = -join ($randomBytes | ForEach-Object { $alphabet[$_ % $alphabet.Length] })
-
 $dbNameSql = $DatabaseName.Replace('`', '``')
 $dbUserSql = Convert-ToSqlLiteral $DatabaseUser
-$dbPasswordSql = Convert-ToSqlLiteral $databasePassword
+$dbPasswordSql = Convert-ToSqlLiteral $DatabasePassword
 $setupSql = @"
 CREATE DATABASE IF NOT EXISTS ``$dbNameSql`` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '$dbUserSql'@'localhost' IDENTIFIED BY '$dbPasswordSql';
@@ -99,7 +207,7 @@ Import-MySqlFile $DatabaseName (Join-Path $InstallPath 'database\seed.sql')
 Import-MySqlFile $DatabaseName (Join-Path $InstallPath 'database\audit_triggers.sql')
 
 $configPath = Join-Path $InstallPath 'config\app.php'
-$escapedPassword = $databasePassword.Replace('\', '\\').Replace("'", "\'")
+$escapedPassword = $DatabasePassword.Replace('\', '\\').Replace("'", "\'")
 $escapedDatabase = $DatabaseName.Replace('\', '\\').Replace("'", "\'")
 $escapedUser = $DatabaseUser.Replace('\', '\\').Replace("'", "\'")
 $config = @"
