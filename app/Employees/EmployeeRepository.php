@@ -20,8 +20,9 @@ final class EmployeeRepository
     public function search(string $query, int $limit = 20): array
     {
         $limit = max(1, min(100, $limit));
-        $stmt = $this->pdo->prepare("SELECT id,employee_code,name,division,department,designation,active FROM employees WHERE employee_code LIKE :q OR name LIKE :q ORDER BY name LIMIT {$limit}");
-        $stmt->execute(['q' => '%' . trim($query) . '%']);
+        $term = '%' . trim($query) . '%';
+        $stmt = $this->pdo->prepare("SELECT id,employee_code,name,division,department,designation,active FROM employees WHERE employee_code LIKE :code_query OR name LIKE :name_query ORDER BY name LIMIT {$limit}");
+        $stmt->execute(['code_query' => $term, 'name_query' => $term]);
         return $stmt->fetchAll();
     }
 
