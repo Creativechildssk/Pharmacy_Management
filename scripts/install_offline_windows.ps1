@@ -74,7 +74,12 @@ Copy-Item -Path (Join-Path $SourceApp '*') -Destination $InstallPath -Recurse -F
 
 $alphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#%_-'
 $randomBytes = New-Object byte[] 32
-[Security.Cryptography.RandomNumberGenerator]::Fill($randomBytes)
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+try {
+    $rng.GetBytes($randomBytes)
+} finally {
+    $rng.Dispose()
+}
 $databasePassword = -join ($randomBytes | ForEach-Object { $alphabet[$_ % $alphabet.Length] })
 
 $dbNameSql = $DatabaseName.Replace('`', '``')
@@ -115,7 +120,8 @@ return [
     ],
 ];
 "@
-Set-Content -LiteralPath $configPath -Value $config -Encoding UTF8
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($configPath, $config, $utf8NoBom)
 
 Write-Host ''
 Write-Host 'Offline application and database installed successfully.' -ForegroundColor Green
@@ -123,7 +129,7 @@ Write-Host "Application path: $InstallPath"
 Write-Host "Database: $DatabaseName"
 Write-Host ''
 Write-Host 'NEXT:' -ForegroundColor Yellow
-Write-Host "1. Create the first Admin account from Command Prompt:"
+Write-Host '1. Create the first Admin account from Command Prompt:'
 Write-Host "   `"$PhpExe`" `"$InstallPath\scripts\create_admin.php`" admin `"Pharmacy Administrator`" `"Choose-A-Strong-Password`""
 Write-Host '2. Start Apache from the XAMPP Control Panel.'
 Write-Host '3. Open http://localhost/Pharmacy_Management/public/ in the browser.'
